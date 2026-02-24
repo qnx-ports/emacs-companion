@@ -1,0 +1,242 @@
+# ALPINE-Contributor: Timo Teräs <timo.teras@iki.fi>
+# ALPINE-Maintainer: Celeste <cielesti@protonmail.com>
+# Maintainer: Elliott Mazzuca <emazzuca@qnx.com>
+maintainer="Celeste <cielesti@protonmail.com>"
+pkgname=emacs
+pkgver=30.2
+pkgrel=1
+_pkgdesc="Extensible, customizable, self-documenting real-time display editor"
+pkgdesc="$_pkgdesc (common files)"
+url="https://www.gnu.org/software/emacs/emacs.html"
+arch="all"
+license="GPL-3.0-or-later"
+makedepends="
+	autoconf
+	automake
+	fontconfig-dev
+	gawk
+	giflib-dev
+	glib-dev
+	gmp-dev
+	gnutls-dev
+	gtk3-dev
+	harfbuzz-dev
+	libjpeg-turbo-dev
+	libpng-dev
+	libwebp-dev
+	libxml2-dev
+	ncurses-dev
+	pango-dev
+	sqlite-dev
+	texinfo
+	tree-sitter-dev
+	"
+subpackages="
+	$pkgname-doc
+	$pkgname-nox
+	$pkgname-pgtk
+	"
+source="https://mirror.csclub.uwaterloo.ca/gnu/emacs/emacs-$pkgver.tar.xz
+        fix-qnx-configure.patch
+	fix-qnx.patch
+        fix-qnx-pty-shell.patch
+	"
+options="!check" # how do you test a text editor without editing text?
+
+prepare() {
+	default_prepare
+	./autogen.sh
+	rm etc/emacs.service # systemd unit
+
+	mkdir -p nox
+	mv ./* nox || true
+
+	cp -a nox pgtk
+	#cp -a nox pgtk-nativecomp
+}
+
+_build_variant() {
+	cd "$builddir/$1"
+	shift
+	ac_cv_func_malloc_trim=no \
+	CFLAGS="${CFLAGS//-Os/-O2} -Wl,-z,execstack,-z,stack-size=2097152" \
+	CXXFLAGS="${CXXFLAGS//-Os/-O2}" \
+	./configure \
+		--build=$CBUILD \
+		--host=$CHOST \
+		--prefix=/usr \
+		--sysconfdir=/etc \
+		--libexecdir=/usr/lib \
+		--localstatedir=/var \
+		--with-harfbuzz \
+		"${@}"
+
+	make
+}
+
+
+_build_pgtk() {
+	_build_variant pgtk \
+		--without-sound \
+		--with-x-toolkit=gtk3 \
+		--with-pgtk \
+		--with-xft \
+		--with-jpeg=yes \
+		--with-tiff=no \
+		--with-native-compilation=no
+}
+
+#_build_pgtk_nativecomp() {
+#	_build_variant pgtk-nativecomp \
+#		--with-x-toolkit=gtk3 \
+#		--with-pgtk \
+#		--with-xft \
+#		--with-jpeg=yes \
+#		--with-tiff=no \
+#		--with-native-compilation=aot
+#}
+
+_build_nox() {
+	_build_variant nox \
+		--without-sound \
+		--without-x \
+		--without-file-notification \
+		--with-native-compilation=no
+}
+
+build() {
+	_build_nox
+	_build_pgtk
+}
+
+package() {
+	make DESTDIR="$pkgdir" install -C pgtk
+
+	cd "$pkgdir"
+	# resolve conflict with ctags package
+	mv usr/bin/ctags \
+		usr/bin/ctags.emacs
+	mv usr/share/man/man1/ctags.1.gz \
+		usr/share/man/man1/ctags.emacs.1.gz
+
+	# remove things that are per-subpackage and not common
+	rm -r \
+		usr/bin/emacs \
+		usr/bin/emacsclient \
+		usr/bin/emacs-$pkgver \
+		usr/lib/emacs/$pkgver/*/emacs*.pdmp \
+		usr/lib/systemd \
+		usr/share/emacs/$pkgver/lisp \
+		usr/share/emacs/$pkgver/site-lisp
+
+	# fix user/root permissions on usr/share files
+	find usr/share/emacs/ -exec chown root:root {} \;
+	find usr/lib -perm -g+s,g+x ! -type d -exec chmod g-s {} \;
+}
+
+doc() {
+	default_doc
+	pkgdesc="$_pkgdesc (documentation)"
+}
+
+_subpackage() {
+	cd "$builddir/$1"
+	make DESTDIR="$subpkgdir" install
+
+	cd "$subpkgdir"
+
+	# remove things that are in -common
+	rm -rf \
+		usr/bin/ctags \
+		usr/bin/ebrowse \
+		usr/bin/etags \
+		usr/include \
+		usr/lib/emacs/$pkgver/*/hexl \
+		usr/lib/emacs/$pkgver/*/movemail \
+		usr/lib/emacs/$pkgver/*/rcs2log \
+		usr/lib/emacs/$pkgver/*/update-game-score \
+		usr/lib/systemd \
+		usr/share/applications \
+		usr/share/emacs/$pkgver/etc \
+		usr/share/icons \
+		usr/share/info \
+		usr/share/man \
+		usr/share/metainfo \
+		var/games
+
+	# fix user/root permissions on usr/share files
+	find usr/share/emacs/ -exec chown root:root {} \;
+	find usr/lib -perm -g+s,g+x ! -type d -exec chmod g-s {} \;
+}
+
+_shared_depends="
+    dbus
+    gmp
+    gnutls
+    ncurses
+    sqlite-libs
+    tree-sitter
+    libxml2
+    zlib-ng
+"
+
+nox() {
+	pkgdesc="$_pkgdesc - non-graphical"
+	depends="
+		$pkgname=$pkgver-r$pkgrel
+		!emacs-pgtk
+		$_shared_depends
+		"
+
+	_subpackage nox
+}
+
+
+pgtk() {
+	pkgdesc="$_pkgdesc - with pure GTK"
+	depends="
+		$pkgname=$pkgver-r$pkgrel
+		!emacs-nox
+		$_shared_depends
+		desktop-file-utils
+		hicolor-icon-theme
+		gtk3
+		glib
+		harfbuzz
+		libjpeg-turbo
+		libpng
+		libwebpdecoder
+		libwebpdemux
+		pango
+		giflib
+		"
+
+	_subpackage pgtk
+}
+
+#pgtk_nativecomp() {
+#	pkgdesc="$_pkgdesc - with pure GTK and native compilation"
+#	depends="
+#		$pkgname=$pkgver-r$pkgrel
+#		!emacs-gtk3
+#		!emacs-gtk3-nativecomp
+#		!emacs-pgtk
+#		!emacs-nox
+#		!emacs-x11
+#		!emacs-x11-nativecomp
+#		gcc
+#		musl-dev
+#		desktop-file-utils
+#		hicolor-icon-theme
+#		"
+#
+#	_subpackage pgtk-nativecomp
+#}
+
+
+sha512sums="
+313432d11e95c74f8cd35c5b1da442e6223f5d40f9173c55883c0339ecbfb97a0bedf79177ef8902afd3e33c078a233777bed01f5caffa1e7524f17d58bfc9a2  emacs-30.2.tar.xz
+493c277dddf0512c210fe6ffab1a235ed1748341eac65ec2e1217675ae7d592aeb44164c0a93fe4049fb081df53e87e42be253d19bc80adca908329e619acaf8  fix-qnx-configure.patch
+a4b0bad338c7e8d0b54fc7d095ec79c9ce4826007e8885e23d9ef8e0d3d54e6fa58f67a354a08940293d95e131ae3d11874e17966a492174e1a39e27ee89eb69  fix-qnx.patch
+c60afeac61b4d9536a931468f5ef6165f920ba150c8ffbb8a73d8755a006c8eb0fc12ce989d3239b8d7ea27d780d72cfe23032566a3364baa74101b9010a84d7  fix-qnx-pty-shell.patch
+"

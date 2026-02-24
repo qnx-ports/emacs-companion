@@ -1,0 +1,16 @@
+--- emacs-30.2.orig/configure.ac
++++ emacs-30.2/configure.ac
+@@ -1496,8 +1496,11 @@
+   ## QNX Neutrino
+   *-nto-qnx* )
+     opsys=qnxnto
+-    test -z "$CC" && CC=qcc
+-    LDFLAGS="-N2M $LDFLAGS"
++
++    if [ -z "$CC" ]; then
++        CC=qcc
++        LDFLAGS="-N2M $LDFLAGS"
++    fi
+   ;;
+ 
+   *-haiku )
