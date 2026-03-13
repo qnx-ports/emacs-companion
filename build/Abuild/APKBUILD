@@ -4,7 +4,7 @@
 maintainer="Celeste <cielesti@protonmail.com>"
 pkgname=emacs
 pkgver=30.2
-pkgrel=1
+pkgrel=${pkgrel:-0}
 _pkgdesc="Extensible, customizable, self-documenting real-time display editor"
 pkgdesc="$_pkgdesc (common files)"
 url="https://www.gnu.org/software/emacs/emacs.html"
@@ -234,6 +234,7 @@ pgtk() {
 #}
 
 
+options="$options ${DISABLE_CHECK:+!check}"
 sha512sums="
 313432d11e95c74f8cd35c5b1da442e6223f5d40f9173c55883c0339ecbfb97a0bedf79177ef8902afd3e33c078a233777bed01f5caffa1e7524f17d58bfc9a2  emacs-30.2.tar.xz
 493c277dddf0512c210fe6ffab1a235ed1748341eac65ec2e1217675ae7d592aeb44164c0a93fe4049fb081df53e87e42be253d19bc80adca908329e619acaf8  fix-qnx-configure.patch
